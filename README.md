@@ -9,7 +9,7 @@ Last update: 2022-09-25 Email: gouwanglong@westlake.edu.cn
 Environment Stata and R 
 
 Scripts
-1.1 Statistic.do Function: Pipline of preprocessing and statistic analysis
+1.1 Statistic analysis.do Function: Pipline of preprocessing and statistic analysis
 
 1.2 Visualization.R 
 
