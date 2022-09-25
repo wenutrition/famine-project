@@ -1,0 +1,56 @@
+#-------PCOA Analysis for the gut microbial composition for the cohorts-----
+
+dfm<- readxl::read_xlsx("D:\\饥荒和肠道菌群\\results\\rawdata.xlsx",sheet = "combine") 
+otu<- as.data.frame(subset( dfm, select = -c(SampleID, label) ))
+group <- as.factor(dfm$label)
+
+distance <- vegdist(otu, method = 'bray')
+bray_curtis <- as.matrix(distance)
+
+pcoa = cmdscale(bray_curtis, k=3, eig=T) # k is dimension, 3 is recommended; eig is eigenvalues
+points = as.data.frame(pcoa$points) # get coordinate string, format to dataframme
+colnames(points) = c("x", "y", "z") 
+eig = pcoa$eig
+points = cbind(points, group)
+points$group <- as.factor(points$group)
+
+OUT<-as.data.frame(points)
+write.table(OUT,"D:\\饥荒和肠道菌群\\results_paper\\Beta_diversity\\All_PCOA.csv",sep=",")
+
+p = ggplot(points, aes(x=x, y=y, color=points$group)) +
+ 
+  geom_point(alpha=.7, size=2) +
+  scale_color_manual(limits = c("GNHS", 'GGMP','CHNS'), values = c("#d95f02","#1b9e77","#7570b3")) +
+  labs(x=paste("PCoA 1 (", format(100 * eig[1] / sum(eig), digits=4), "%)", sep=""),
+       y=paste("PCoA 2 (", format(100 * eig[2] / sum(eig), digits=4), "%)", sep=""),
+       title="PCoA of Bray-Curtis distance of selected microbial composition")+stat_ellipse(level = 0.95, show.legend = F, size = 1.3)
+p
+p + theme_bw() + theme(panel.grid=element_blank())
+set.seed(1)
+pairwise.adonis <- pairwise.adonis(x=otu, factors=group, sim.function = "vegdist",
+                                   sim.method = "bray",
+                                   p.adjust.m = "BH",
+                                   reduce = NULL,
+                                   perm = 999)
+pairwise.adonis
+
+
+#--------Alpha diversity and disease---
+
+dat<- readxl::read_xlsx("D:\\饥荒和肠道菌群\\结果定稿\\Alpha diversity\\plot_data.xlsx",sheet = "Sheet2")
+dat<-subset(dat,outcome=="std_observed_otus")
+dat <- transform( dat,Group=as.factor(Cohort)) 
+
+p<-ggplot(aes(x=lul,xend=uul,y=group),data=dat)+
+  geom_dumbbell(colour_x = "white",colour_xend = "white",color="gray",size=1)+
+  #geom_point(aes(x=b,y=micro),color="#EE7621",size=4,shape=23,fill="#EE7621")+
+  geom_point(aes(x=rr,y=group,fill=Group),size = 5,shape=23)+ #可在这里修改点的透明度、大小
+  scale_fill_manual(values = c("#F08080","#1E90FF","#FFA500"))+
+  theme_light()+
+  theme(panel.grid.minor.x =element_blank(),axis.text=element_text(size=12),
+        panel.grid = element_blank(),
+        legend.position = c("none")
+  )+geom_vline(aes(xintercept = 1),linetype="dotted")+ facet_wrap(~ Group,ncol = 3)+xlab("rr")#+ coord_flip()
+p
+ggsave(p, file='D:\\饥荒和肠道菌群\\结果定稿\\Alpha diversity\\disease_obs_statis.pdf') 
+
