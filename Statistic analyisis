@@ -1,6 +1,7 @@
 
-*---famine-diversity--
+*----------1.Famine-diversity-disease-----
 
+*--1.1-Famine-diversity--
 use  "D:\饥荒和肠道菌群\data_pre\GNHS_rawdataset",clear 
 inspect observed_otus shannon pielou_e faith_pd 
 drop if observed_otus==. //drop3
@@ -28,7 +29,7 @@ use "`res'", clear
 export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\statistic.xlsx",  firstrow(variables) sheet("GNHS_famine_diversity") sheetreplace  
 restore
 
-*---diversity---disease
+*---1.2--Diversity-disease
 
 logit DYS std_observed_otus Age i.sex bmi, or
 
@@ -48,359 +49,236 @@ use "`res'", clear
 export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\statistic.xlsx",  firstrow(variables) sheet("GNHS_diversity_disease") sheetreplace  
 restore
 
+*---1.3--Genus-diversity--
 
-*---3.2---GGMP---
-
-use "D:\饥荒和肠道菌群\data_pre\GGMP_rawdata_update",clear 
-replace Bristol_stool_type="." if Bristol_stool_type=="NA"
-destring Bristol_stool_type,replace
-rename Bristol_stool_type BSC_type
-tab BSC_type,missing
-gen sex=0 
-replace sex=1 if gender=="m"
-replace anthrop_BMI="" if anthrop_BMI=="NA" // 93 missing
-destring anthrop_BMI ,replace
-su anthrop_BMI
-replace anthrop_BMI=23.4 if anthrop_BMI==.
-rename anthrop_BMI bmi
-gen alc=0 
-replace alc=1 if diet_alc=="y"
-gen smoke=0
-replace smoke=1 if smk_smoking=="y"
-gen district=substr(SampleID,1,5)
-tab district
-gen medicine=0
-replace medicine=1 if Medication=="y"
-replace fruits="" if fruits=="NA"
-replace vegetable="" if vegetable=="NA"
-destring fruits vegetables,replace
-inspect age sex bmi alc smoke medicine BSC_type medicine fruit vegetable
-tab Group2 BSC_type
-tab Group2,missing
-replace Group2=9 if Group2==.
-foreach alpha of varlist pielou_evenness faith_pd observed_otus shannon{
-	egen std_`alpha'=std(`alpha')
+tempname coef
+ tempfile res
+ postfile `coef' str200(diversity genus) float( n corr  p)  using "`res'", replace
+qui foreach diversity of varlist observed_otus shannon pielou_e faith_pd{
+foreach genus of varlist g2-g392{
+ spearman `diversity'  `genus' 
+ post `coef'    ("`diversity'")  ("`genus'") (r(N)) (r(rho))  (r(p))
 }
-drop bmi _merge
-merge 1:1 SampleID using "D:\CNHS\data_pre\GGMP_disease.dta"
+}
+ postclose `coef'
+ preserve
+use "`res'", clear
+export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\statistic.xlsx",  firstrow(variables) sheet("GNHS_g_diversity") sheetreplace  
+restore
+
+
+*----------2--Famine--PCOA-disease
+
+*-----2.1-Famine-PCOA--
+
+import delimited "D:\\饥荒和肠道菌群\\final_results\\Beta diversity\\GNHS_PCOA.csv", clear //119tab group
+rename sampleid SampleID 
+*merge 1:1 SampleID using "D:\CNHS\data_pre\GNHS_disease.dta"
+merge 1:1 SampleID using  "D:\饥荒和肠道菌群\data_pre\GNHS_rawdataset"
+
+ foreach micro of varlist pcoa1 pcoa2{
+	egen std_`micro'=std(`micro')
+   } 
+tab group,missing
+replace group=9 if group==-1
+
+*---PCOA1--
+
+tempname coef
+ tempfile res
+ postfile `coef' str200(group) float(n beta lul uul p)  using "`res'", replace
+regress std_pcoa1 i.group Age i.sex bmi i.T2D_med i.dys_med i.hyp_med 
+forvalue m=1/9{
+ test `m'.group
+  post `coef'  ("`m'")  (e(N)) (_b[`m'.group])  (_b[`m'.group]-1.96*_se[`m'.group]) (_b[`m'.group]+1.96*_se[`m'.group])  (chi2tail(1,(_b[`m'.group]/_se[`m'.group])^2)) 
+}
+ postclose `coef'
+  preserve
+use "`res'", clear
+export excel using "D:\饥荒和肠道菌群\结果定稿\Beta diversity\famine_pcoa.xlsx",  firstrow(variables) sheet("GNHS_PCOA1") sheetreplace  
+restore
+
+*----PCOA2--
+
+tempname coef
+ tempfile res
+ postfile `coef' str200(group) float(n beta lul uul p)  using "`res'", replace
+regress std_pcoa2 i.group Age i.sex bmi i.T2D_med i.dys_med i.hyp_med 
+forvalue m=1/9{
+ test `m'.group
+  post `coef'  ("`m'")  (e(N)) (_b[`m'.group])  (_b[`m'.group]-1.96*_se[`m'.group]) (_b[`m'.group]+1.96*_se[`m'.group])  (chi2tail(1,(_b[`m'.group]/_se[`m'.group])^2)) 
+}
+ postclose `coef'
+  preserve
+use "`res'", clear
+export excel using "D:\饥荒和肠道菌群\结果定稿\Beta diversity\famine_pcoa.xlsx",  firstrow(variables) sheet("GNHS_PCOA2") sheetreplace  
+restore
+
+*-------2.2 GGMP-----
+
+import delimited "D:\\饥荒和肠道菌群\\final_results\\Beta diversity\\GGMP_PCOA.csv", clear 
+rename sampleid SampleID 
+merge 1:1 SampleID using "D:\CNHS\data_pre\GGMP_dataset.dta"
 drop _merge Group2
 merge 1:1 SampleID using  "D:\饥荒和肠道菌群\data_pre\GGMP_Group2"
 drop _merge
-save "D:\CNHS\data_pre\GGMP_dataset.dta",replace
-
-
-*---genus-diversity--
-
-use  "D:\CNHS\data_pre\GGMP_dataset.dta",clear
-scalar i=0
- foreach micro of varlist  g1-g766{
-	count if `micro'==0
-	if  r(N)>=5904 {	
-	drop  `micro' 
-	scalar i=i+1
-	}
-}
-
-tempname coef
- tempfile res
- postfile `coef' str200(diversity genus) float( n corr  p)  using "`res'", replace
-qui foreach diversity of varlist observed_otus shannon  faith_pd pielou_evenness{
-foreach genus of varlist g7-g767{
- spearman `diversity'  `genus' 
- post `coef'    ("`diversity'")  ("`genus'") (r(N)) (r(rho))  (r(p))
-}
-}
- postclose `coef'
- preserve
-use "`res'", clear
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\statistic.xlsx",  firstrow(variables) sheet("GGMP_g_diversity") sheetreplace  
-restore
-
-*-rename the genus-
-
-import excel "D:\饥荒和肠道菌群\结果定稿\结果整合\microbiota list.xlsx", sheet("GGMP") firstrow clear
-keep hub genus
-save "D:\CNHS\data_pre\GGMP_hublist.dta",replace
- 
-import excel "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\statistic.xlsx", sheet("GGMP_g_diversity") firstrow clear
-merge m:m genus using "D:\CNHS\data_pre\GGMP_hublist.dta"
-tab diversity
-rename hub highlight
-
-preserve
-keep if diversity=="observed_otus"
-sort p
-gen rank=_n
-gen q=p*188/rank
-drop if q>0.05
-gen rho=-corr
-sort rho
-gen Rank=_n
-gen association="Positive"
-replace association="Negative" if corr<0
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\plot_data.xlsx",  firstrow(variables) sheet("GGMP_obs_micro") sheetreplace  
-restore
-
-preserve
-keep if diversity=="faith_pd"
-sort p
-gen rank=_n
-gen q=p*188/rank
-drop if q>0.05
-gen rho=-corr
-sort rho
-gen Rank=_n
-gen association="Positive"
-replace association="Negative" if corr<0
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\plot_data.xlsx",  firstrow(variables) sheet("GGMP_faith_pd_micro") sheetreplace  
-restore
-
-preserve
-keep if diversity=="shannon"
-sort p
-gen rank=_n
-gen q=p*188/rank
-drop if q>0.05
-gen rho=-corr
-sort rho
-gen Rank=_n
-gen association="Positive"
-replace association="Negative" if corr<0
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\plot_data.xlsx",  firstrow(variables) sheet("GGMP_shannon_micro") sheetreplace  
-restore
-
-preserve
-keep if diversity=="pielou_evenness"
-sort p
-gen rank=_n
-gen q=p*188/rank
-drop if q>0.05
-gen rho=-corr
-sort rho
-gen Rank=_n
-gen association="Positive"
-replace association="Negative" if corr<0
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\plot_data.xlsx",  firstrow(variables) sheet("GGMP_pielou_evenness_micro") sheetreplace  
-restore
-
-*---famine-diversity--
-
-use  "D:\CNHS\data_pre\GGMP_dataset.dta",clear
-inspect medicine 
-tab Group2
-
-preserve 
-regress observed_otus i.Group2 Age i.sex bmi  i.medicine
-drop if T2D==1 // 15 participants drop in the famine exposure group
-tab Group2
-regress observed_otus i.Group2 Age i.sex bmi  i.medicine // 0.052
-restore
-
-
-tempname coef
- tempfile res
- postfile `coef' str200(outcome) str200(group) float( n beta lul uul p) str200(cov) using "`res'", replace
-global cov   Age i.sex bmi  i.medicine
-qui foreach outcome of varlist std_observed_otus std_shannon std_faith_pd std_pielou_evenness{
-regress `outcome' i.Group2 ${cov}
-forvalue m=1/9{
- test `m'.Group2
- post `coef'   ("`outcome'")  ("`m'") (e(N)) (_b[`m'.Group2])  (_b[`m'.Group2]-1.96*_se[`m'.Group2])  (_b[`m'.Group2]+1.96*_se[`m'.Group2])  (chi2tail(1,(_b[`m'.Group2]/_se[`m'.Group2])^2))  ("${cov}")
-}
-}
-
- postclose `coef'
- preserve
-use "`res'", clear
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\statistic.xlsx",  firstrow(variables) sheet("GGMP_famine_diversity") sheetreplace  
-restore
-
-*---diversity---disease
-
-tempname coef
- tempfile res
- postfile `coef' str200(outcome diversity) float(n rr lul uul p) using "`res'", replace
- foreach outcome of varlist T2D HYP DYS fattyliver{
- foreach diversity of varlist std_observed_otus std_shannon std_faith_pd std_pielou_evenness{
- logit `outcome' `diversity' Age i.sex bmi,  or
-  test `diversity'
-  post `coef'  ("`outcome'")  ("`diversity'")   (e(N)) (exp(_b[`diversity']))  (exp(_b[`diversity']-1.96*_se[`diversity']))  (exp(_b[`diversity']+1.96*_se[`diversity']))  (chi2tail(1,(_b[`diversity']/_se[`diversity'])^2)) 
+ foreach micro of varlist pcoa1 pcoa2{
+	egen std_`micro'=std(`micro')
    } 
-   }
-postclose `coef'
-preserve
+tab group,missing
+tab Group2,missing  
+drop group
+rename Group2 group
+
+*---PCOA1--
+
+tempname coef
+ tempfile res
+ postfile `coef' str200(group) float(n beta lul uul p)  using "`res'", replace
+regress std_pcoa1 i.group Age i.sex bmi i.medicine 
+forvalue m=1/9{
+ test `m'.group
+  post `coef'  ("`m'")  (e(N)) (_b[`m'.group])  (_b[`m'.group]-1.96*_se[`m'.group]) (_b[`m'.group]+1.96*_se[`m'.group])  (chi2tail(1,(_b[`m'.group]/_se[`m'.group])^2)) 
+}
+ postclose `coef'
+  preserve
 use "`res'", clear
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\statistic.xlsx",  firstrow(variables) sheet("GGMP_diversity_disease_update") sheetreplace  
+export excel using "D:\饥荒和肠道菌群\结果定稿\Beta diversity\famine_pcoa.xlsx",  firstrow(variables) sheet("GGMP_PCOA1") sheetreplace  
 restore
 
-*---3.3---CHNS---
+*----PCOA2--
 
-use "D:\饥荒和肠道菌群\data_pre\CHNS_rawdata",replace 
-rename age Age
-tab sex
-rename alcohol alc
-replace alc=0 if alc==9
-replace smoke=0 if smoke==9
-gen T2D_drug=0
-replace T2D_drug=1 if  U24E==1 | U24F==1
-replace hyp_med=0 if hyp_med!=1
+tempname coef
+ tempfile res
+ postfile `coef' str200(group) float(n beta lul uul p)  using "`res'", replace
+regress std_pcoa2 i.group Age i.sex bmi i.medicine  
+forvalue m=1/9{
+ test `m'.group
+  post `coef'  ("`m'")  (e(N)) (_b[`m'.group])  (_b[`m'.group]-1.96*_se[`m'.group]) (_b[`m'.group]+1.96*_se[`m'.group])  (chi2tail(1,(_b[`m'.group]/_se[`m'.group])^2)) 
+}
+ postclose `coef'
+  preserve
+use "`res'", clear
+export excel using "D:\饥荒和肠道菌群\结果定稿\Beta diversity\famine_pcoa.xlsx",  firstrow(variables) sheet("GGMP_PCOA2") sheetreplace  
+restore
+
+*-----2.3--CHNS---
+
+import delimited "D:\\饥荒和肠道菌群\\final_results\\Beta diversity\\CHNS_PCOA.csv", clear //119
+rename sampleid SampleID 
+merge 1:1 SampleID using "D:\CNHS\data_pre\CHNS_dataset.dta"
+
+tab group
+ foreach micro of varlist pcoa1 pcoa2{
+	egen std_`micro'=std(`micro')
+   } 
+tab group,missing
+tab Group2,missing  
+drop group
+rename Group2 group
+
+*---PCOA1--
+
+tempname coef
+ tempfile res
+ postfile `coef' str200(group) float(n beta lul uul p)  using "`res'", replace
+regress std_pcoa1 i.group Age i.sex bmi i.hyp_med i.T2D_drug
+forvalue m=1/9{
+ test `m'.group
+  post `coef'  ("`m'")  (e(N)) (_b[`m'.group])  (_b[`m'.group]-1.96*_se[`m'.group]) (_b[`m'.group]+1.96*_se[`m'.group])  (chi2tail(1,(_b[`m'.group]/_se[`m'.group])^2)) 
+}
+ postclose `coef'
+  preserve
+use "`res'", clear
+export excel using "D:\饥荒和肠道菌群\结果定稿\Beta diversity\famine_pcoa.xlsx",  firstrow(variables) sheet("CHNS_PCOA1") sheetreplace  
+restore
+
+*----PCOA2--
+
+tempname coef
+ tempfile res
+ postfile `coef' str200(group) float(n beta lul uul p)  using "`res'", replace
+regress std_pcoa2 i.group Age i.sex bmi i.hyp_med i.T2D_drug  
+forvalue m=1/9{
+ test `m'.group
+  post `coef'  ("`m'")  (e(N)) (_b[`m'.group])  (_b[`m'.group]-1.96*_se[`m'.group]) (_b[`m'.group]+1.96*_se[`m'.group])  (chi2tail(1,(_b[`m'.group]/_se[`m'.group])^2)) 
+}
+ postclose `coef'
+  preserve
+use "`res'", clear
+export excel using "D:\饥荒和肠道菌群\结果定稿\Beta diversity\famine_pcoa.xlsx",  firstrow(variables) sheet("CHNS_PCOA2") sheetreplace  
+restore
+
+import delimited "D:\饥荒和肠道菌群\final_results\CLR_transform\GNHS.csv",  clear 
+rename sampleid SampleID
+merge 1:1 SampleID using "D:\饥荒和肠道菌群\data_pre\GNHS_rawdataset"
+tab Group2,missing
 replace Group2=9 if Group2==.
+tab Group2 
+gen peason_hub=g248+g219+g136+g140+g224+g55
+gen sparcc_hub=g205+g226+g219+g224+g100+g136
+gen speasy_hub=g248+g205+g224+g136+g219+g217
 
-foreach alpha of varlist observed_otus shannon  faith_pd pielou_e{
-	egen std_`alpha'=std(`alpha')
-}
-drop  _merge T2D
-merge 1:1 SampleID using "D:\CNHS\data_pre\CHNS_disease.dta"
-drop _merge
-save "D:\CNHS\data_pre\CHNS_dataset.dta",replace
-
-*---famine-diversity--
-
-use "D:\CNHS\data_pre\CHNS_dataset.dta",clear
-regress observed_otus i.Group2 Age i.sex bmi  i.T2D_drug i.hyp_med // 0.018
-regress observed_otus i.Group2 Age i.sex bmi  i.T2D_drug i.hyp_med income i.city // 0.019
-
-*---drop disease--
-
-preserve 
-regress observed_otus i.Group2 Age i.sex bmi  i.T2D_drug i.hyp_med
-drop if T2D==1 // 0.003, 13 participants excluded in famine group 
-tab Group2
-regress observed_otus i.Group2 Age i.sex bmi  i.T2D_drug i.hyp_med
+preserve
+keep Group2 peason_hub sparcc_hub speasy_hub g140	g136	g224	g219	g248	g55	g100	g205	g226	g217
+order Group2 peason_hub sparcc_hub speasy_hub g140	g136	g224	g219	g248	g55	g100	g205	g226	g217
+tab Group2,missing
+replace Group2=9 if Group2==.
+export excel using "D:\饥荒和肠道菌群\data_pre\hub.xlsx",  firstrow(variables) sheet("GNHS_clr") sheetreplace  
 restore
 
+*----3---Famine-Keystone taxa and disease---
 
-tab Group2
+*--3.1--Keystone taxa and disease--   
+
+import delimited "D:\饥荒和肠道菌群\final_results\CLR_transform\CHNS.csv",  clear 
+rename sampleid SampleID
+merge 1:1 SampleID using "D:\CNHS\data_pre\CHNS_dataset.dta"
+tab Group2,missing
+
+gen peason_hub=g691+g703+g750+g787+g807+g825+g839+g848+g855
+gen sparcc_hub=g69+g256+g294+g769+g787+g825+g839+g842+g855
+gen speasy_hub=g69+g691+g820+g825+g827+g839+g842+g852+g855
+
+ foreach micro of varlist peason_hub sparcc_hub speasy_hub g691	g703	g750	g787	g807	g825	g839	g848	g855	g69	g256	g294	g769	g842	g820	g827	g852  {
+	egen std_`micro'=std(`micro')
+   } 
+   
 tempname coef
  tempfile res
- postfile `coef' str200(outcome) str200(group) float( n beta lul uul p) str200(cov) using "`res'", replace
-global cov   Age i.sex bmi  i.T2D_drug i.hyp_med
-qui foreach outcome of varlist std_observed_otus std_shannon std_faith_pd std_pielou_e {
-regress `outcome' i.Group2 ${cov}
-forvalue m=1/9{
- test `m'.Group2
- post `coef'   ("`outcome'")  ("`m'") (e(N)) (_b[`m'.Group2])  (_b[`m'.Group2]-1.96*_se[`m'.Group2])  (_b[`m'.Group2]+1.96*_se[`m'.Group2])  (chi2tail(1,(_b[`m'.Group2]/_se[`m'.Group2])^2))  ("${cov}")
-}
+ postfile `coef' str200(outcome) str200(micro) float( n beta lul uul p)  using "`res'", replace
+global cov   Age i.sex bmi  
+qui foreach outcome of varlist T2D  DYS HYP{
+foreach micro of varlist std_peason_hub-std_g852 {
+ logit `outcome' `micro' Age i.sex bmi,  or
+  test `micro'
+  post `coef'  ("`outcome'") ("`micro'")   (e(N)) (exp(_b[`micro']))  (exp(_b[`micro']-1.96*_se[`micro']))  (exp(_b[`micro']+1.96*_se[`micro']))  (chi2tail(1,(_b[`micro']/_se[`micro'])^2)) 
+   } 
+
 }
 
  postclose `coef'
  preserve
 use "`res'", clear
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\statistic.xlsx",  firstrow(variables) sheet("CHNS_famine_diversity") sheetreplace  
+export excel using "D:\饥荒和肠道菌群\结果定稿\网络分析\statistic\results.xlsx",  firstrow(variables) sheet("CHNS_hubmicro_disease_update") sheetreplace  
 restore
 
-*---diversity---disease
-
-logit DYS std_observed_otus Age i.sex bmi,  or
+*----------3.2--Famine-keystone--
 
 tempname coef
  tempfile res
- postfile `coef' str200(outcome diversity) float(n rr lul uul p) using "`res'", replace
- foreach outcome of varlist T2D HYP DYS {
- foreach diversity of varlist std_observed_otus std_shannon std_faith_pd std_pielou_e{
- logit `outcome' `diversity' Age i.sex bmi,  or
-  test `diversity'
-  post `coef'  ("`outcome'")  ("`diversity'")   (e(N)) (exp(_b[`diversity']))  (exp(_b[`diversity']-1.96*_se[`diversity']))  (exp(_b[`diversity']+1.96*_se[`diversity']))  (chi2tail(1,(_b[`diversity']/_se[`diversity'])^2)) 
+ postfile `coef' str200 (microbiota group)  float(n rr lul uul p) using "`res'", replace
+foreach micro of varlist std_peason_hub-std_g217 {
+ regress   `micro' i.Group2 Age i.sex bmi i.T2D_med i.dys_med i.hyp_med
+forvalue m=1/9{
+  test `m'.Group2
+  post `coef'  ("`micro'") ("`m'") (e(N)) (_b[`m'.Group2]) (_b[`m'.Group2]-1.96*_se[`m'.Group2])  (_b[`m'.Group2]+1.96*_se[`m'.Group2])  (chi2tail(1,(_b[`m'.Group2]/_se[`m'.Group2])^2)) 
    } 
    }
 postclose `coef'
 preserve
 use "`res'", clear
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\statistic.xlsx",  firstrow(variables) sheet("CHNS_diversity_disease_update") sheetreplace  
+export excel using "D:\饥荒和肠道菌群\结果定稿\网络分析\statistic\results.xlsx",  firstrow(variables) sheet("GNHS_famine_hubmicro_adddrug") sheetreplace  
 restore
 
-*---genus-diversity--
 
-use "D:\CNHS\data_pre\CHNS_dataset.dta",clear
-merge 1:1 SampleID using  "D:\CNHS\data_pre\CHNS_g_138.dta"
-keep if _merge==3
-scalar i=0
- foreach micro of varlist  g1-g1510{
-	count if `micro'==0
-	if  r(N)>=2730 {	
-	drop  `micro' 
-	scalar i=i+1
-	}
-}
-
-tempname coef
- tempfile res
- postfile `coef' str200(diversity genus) float( n corr  p)  using "`res'", replace
-qui foreach diversity of varlist observed_otus shannon  faith_pd pielou_e{
-foreach genus of varlist g69-g1501{
- spearman `diversity'  `genus' 
- post `coef'    ("`diversity'")  ("`genus'") (r(N)) (r(rho))  (r(p))
-}
-}
- postclose `coef'
- preserve
-use "`res'", clear
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\statistic.xlsx",  firstrow(variables) sheet("CHNS_g_diversity") sheetreplace  
-restore
-
-*-rename the genus-
-
-import excel "D:\饥荒和肠道菌群\结果定稿\结果整合\microbiota list.xlsx", sheet("CHNS") firstrow clear
-keep hub genus
-save "D:\CNHS\data_pre\CHNS_hublist.dta",replace
- 
-import excel "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\statistic.xlsx", sheet("CHNS_g_diversity") firstrow clear
-merge m:m genus using "D:\CNHS\data_pre\CHNS_hublist.dta"
-tab diversity
-rename hub highlight
-
-preserve
-keep if diversity=="observed_otus"
-sort p
-gen rank=_n
-gen q=p*177/rank
-drop if q>0.05
-gen rho=-corr
-sort rho
-gen Rank=_n
-gen association="Positive"
-replace association="Negative" if corr<0
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\plot_data.xlsx",  firstrow(variables) sheet("CHNS_obs_micro") sheetreplace  
-restore
-
-preserve
-keep if diversity=="faith_pd"
-sort p
-gen rank=_n
-gen q=p*177/rank
-drop if q>0.05
-gen rho=-corr
-sort rho
-gen Rank=_n
-gen association="Positive"
-replace association="Negative" if corr<0
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\plot_data.xlsx",  firstrow(variables) sheet("CHNS_faith_pd_micro") sheetreplace  
-restore
-
-preserve
-keep if diversity=="shannon"
-sort p
-gen rank=_n
-gen q=p*177/rank
-drop if q>0.05
-gen rho=-corr
-sort rho
-gen Rank=_n
-gen association="Positive"
-replace association="Negative" if corr<0
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\plot_data.xlsx",  firstrow(variables) sheet("CHNS_shannon_micro") sheetreplace  
-restore
-
-preserve
-keep if diversity=="pielou_e"
-sort p
-gen rank=_n
-gen q=p*177/rank
-drop if q>0.05
-gen rho=-corr
-sort rho
-gen Rank=_n
-gen association="Positive"
-replace association="Negative" if corr<0
-export excel using "D:\饥荒和肠道菌群\结果定稿\Alpha diversity\plot_data.xlsx",  firstrow(variables) sheet("CHNS_pie_micro") sheetreplace  
-restore
