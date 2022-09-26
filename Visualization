@@ -54,3 +54,4 @@ p<-ggplot(aes(x=lul,xend=uul,y=group),data=dat)+
 p
 ggsave(p, file='D:\\饥荒和肠道菌群\\结果定稿\\Alpha diversity\\disease_obs_statis.pdf') 
 
+
